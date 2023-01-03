@@ -1,0 +1,404 @@
+<html>
+
+<body>
+    <style>
+        .flex-container {
+            display: flex;
+        }
+    </style>
+
+    <div class="flex-container">
+        <label for="player-speed">Player Speed:</label>
+        <input type="number" id="player-speed" value=3>
+        <label for="enemy-speed">Enemy Speed:</label>
+        <input type="number" id="enemy-speed" value=3>
+    </div>
+
+    <canvas id="gameCanvas" width="1000" height="1000"></canvas>
+    <script>
+        const CANVAS_WIDTH = 1000;
+        const CANVAS_HEIGHT = 1000;
+        const PLAYER_SPRITE_SRC = "images/player.png";
+        const ENEMY_SPRITE_SRC = "images/enemy.png";
+        const EXPLOSION_SPRITE_SRC = "images/explosion.jpg";
+        const EXPLOSION_FRAME_WIDTH = 64;
+        const EXPLOSION_FRAME_HEIGHT = 64;
+        const EXPLOSION_FRAME_COUNT = 8;
+        const EXPLOSION_FRAME_DURATION = 50; // In milliseconds
+        const TIME_PER_FRAME = 16; // In milliseconds
+
+
+        // Set up the canvas and context for drawing
+        var canvas = document.getElementById("gameCanvas");
+        var context = canvas.getContext("2d");
+
+        var playerSpeedInput = document.getElementById("player-speed");
+        var enemySpeedInput = document.getElementById("enemy-speed");
+
+        // Create the player sprite
+        var playerSprite = new Image();
+        playerSprite.src = PLAYER_SPRITE_SRC;
+
+        // Create the enemy sprite
+        var enemySprite = new Image();
+        enemySprite.src = ENEMY_SPRITE_SRC;
+
+        var explosionSprite = new Image();
+        explosionSprite.src = EXPLOSION_SPRITE_SRC;
+
+        const ammoType = {
+            Normal: 'normal',
+            Explosive: 'explosive',
+            Rapid: 'rapid',
+            Scatter: 'scatter'
+        };
+
+
+        class Shot {
+            constructor(x, y, directionX, directionY, ammotype) {
+                this.x = x;
+                this.y = y;
+                this.directionX = directionX;
+                this.directionY = directionY;
+                this.ammotype = ammotype;
+            }
+
+            draw() {
+                if (this.ammotype === ammoType.Normal) {
+                    this.drawNormal();
+                } else if (this.ammotype === ammoType.Explosive) {
+                    this.drawExplosive();
+                } else if (this.ammotype === ammoType.Rapid) {
+                    this.drawRapid();
+                } else if (this.ammotype === ammoType.Scatter) {
+                    this.drawScatter();
+                }
+            }
+
+            drawNormal() {
+                context.fillRect(this.x, this.y, 5, 5);
+                this.x += 5 * this.directionX;
+                this.y += 5 * this.directionY;
+            }
+
+            drawExplosive() {
+                var currentFrame = Math.floor(this.elapsedTime / EXPLOSION_FRAME_DURATION) % EXPLOSION_FRAME_COUNT;
+                // Draw the current frame of the explosion
+                context.drawImage(explosionSprite, currentFrame * EXPLOSION_FRAME_WIDTH, 0, EXPLOSION_FRAME_WIDTH, EXPLOSION_FRAME_HEIGHT, this.x - EXPLOSION_FRAME_WIDTH / 2, this.y - EXPLOSION_FRAME_HEIGHT / 2, EXPLOSION_FRAME_WIDTH, EXPLOSION_FRAME_HEIGHT);
+                // Increment the elapsed time
+                this.elapsedTime += TIME_PER_FRAME;
+            }
+
+            drawRapid() {
+                context.fillRect(this.x, this.y, 2, 2);
+                this.x += 10 * this.directionX;
+                this.y += 10 * this.directionY;
+            }
+
+            drawScatter() {
+                context.beginPath();
+                context.arc(this.x, this.y, 5, 0, Math.PI * 2);
+                context.fill();
+
+                // Calculate the new x and y positions based on the direction and speed
+                this.x += 5 * this.directionX + (Math.random() - 0.5) * 5;
+                this.y += 5 * this.directionY + (Math.random() - 0.5) * 5;
+            }
+        }
+
+
+        class Obstacle {
+            constructor({ x, y, width, height }) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+            }
+        }
+
+        // Create the player object
+        class Player {
+            constructor() {
+                this.x = 100;
+                this.y = 100;
+                this.speed = 3;
+                this.shots = [];
+                this.angle = 0;
+                this.level = 1;
+                this.width = 0;
+                this.height = 0;
+                this.ammoType = ammoType.Normal
+            }
+            update() {
+                this.width = playerSprite.width * 0.25;
+                this.height = playerSprite.height * 0.25;
+
+
+                // Check for keyboard input
+                if (keyboard[38]) {
+                    // Up arrow key is pressed - move the player up
+                    this.y -= this.speed;
+                    this.angle = 0 * Math.PI / 180
+                }
+                if (keyboard[40]) {
+                    // Down arrow key is pressed - move the player down
+                    this.y += this.speed;
+                    this.angle = 180 * Math.PI / 180
+                }
+                if (keyboard[37]) {
+                    // Left arrow key is pressed - move the player left
+                    this.x -= this.speed;
+                    // Set the rotation angle based on the direction of movement
+                    this.angle = 270 * Math.PI / 180
+                }
+                if (keyboard[39]) {
+                    // Right arrow key is pressed - move the player right
+                    this.x += this.speed;
+                    // Set the rotation angle based on the direction of movement
+                    this.angle = 90 * Math.PI / 180
+                }
+
+                if (keyboard[32]) {
+                    // Space bar is pressed - shoot a shot
+                    var shotDirectionX = 0;
+                    var shotDirectionY = 0;
+                    if (keyboard[37]) {
+                        // Left arrow key is also pressed - shoot left
+                        shotDirectionX = -1;
+                    } else if (keyboard[39]) {
+                        // Right arrow key is also pressed - shoot right
+                        shotDirectionX = 1;
+                    }
+                    if (keyboard[38]) {
+                        // Up arrow key is also pressed - shoot up
+                        shotDirectionY = -1;
+                    } else if (keyboard[40]) {
+                        // Down arrow key is also pressed - shoot down
+                        shotDirectionY = 1;
+                    }
+                    this.shots.push(new Shot(this.x + 50, this.y + 25, shotDirectionX, shotDirectionY, this.ammoType));
+                }
+
+                // Wrap the player around the edges of the canvas
+                if (player.x < 0) {
+                    player.x += canvas.width;
+                }
+                if (player.x > canvas.width) {
+                    player.x -= canvas.width;
+                }
+                if (player.y < 0) {
+                    player.y += canvas.height;
+                }
+                if (player.y > canvas.height) {
+                    player.y -= canvas.height;
+                }
+
+                // Update the player's shots
+                for (var i = 0; i < this.shots.length; i++) {
+                    if (this.shots[i].x > canvas.width) {
+                        this.shots.splice(i, 1);
+                        i--;
+                    }
+                }
+            }
+            draw() {
+                context.save();
+                context.translate(this.x + this.width / 2, this.y + this.height / 2);
+                context.rotate(this.angle);
+                context.drawImage(playerSprite, -this.width / 2, -this.height / 2, this.width, this.height);
+                context.restore();
+                // Draw the player's shots
+                for (var i = 0; i < this.shots.length; i++) {
+                    this.shots[i].draw()
+                }
+            }
+        };
+
+
+        class Enemy {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speed = 3;
+                this.direction = 0;
+                this.timer = 0;
+                this.isAlive = true;
+                this.deathTimer = 0;
+            }
+
+            update() {
+                this.timer++;
+                if (this.timer >= 60) {
+                    this.direction = Math.floor(Math.random() * 4);
+                    this.timer = 0;
+                }
+                if (this.direction === 0) {
+                    this.y -= this.speed;
+                } else if (this.direction === 1) {
+                    this.x += this.speed;
+                } else if (this.direction === 2) {
+                    this.y += this.speed;
+                } else {
+                    this.x -= this.speed;
+                }
+
+                // Check if any of the player's shots are colliding with the enemy
+                for (let i = 0; i < player.shots.length; i++) {
+                    let shot = player.shots[i];
+                    if (this.isAlive && this.x < shot.x + 5 && this.x + 25 > shot.x && this.y < shot.y + 5 && this.y + 25 > shot.y) {
+                        this.isAlive = false;
+                        this.deathTimer = 0;
+                    }
+                }
+
+                // Increment the death timer if the enemy is not alive
+                if (!this.isAlive) {
+                    this.deathTimer++;
+                }
+
+                // Remove the enemy from the canvas if the death timer has reached a certain value
+                if (this.deathTimer >= 180) {
+                    enemies.splice(enemies.indexOf(this), 1);
+                }
+            }
+
+            draw() {
+                if (this.isAlive) {
+                    // Draw the enemy as normal
+                    var enemyWidth = enemySprite.width * 0.25;
+                    var enemyHeight = enemySprite.height * 0.25;
+                    context.drawImage(enemySprite, this.x, this.y, enemyWidth, enemyHeight);
+                } else {
+                    // Draw the enemy with an alpha value that decreases over time
+                    context.globalAlpha = 1 - (this.deathTimer / 180);
+                    var enemyWidth = enemySprite.width * 0.25;
+                    var enemyHeight = enemySprite.height * 0.25;
+                    context.drawImage(enemySprite, this.x, this.y, enemyWidth, enemyHeight);
+                    context.globalAlpha = 1;
+                }
+            }
+        }
+
+
+        // Create the enemies array
+        const enemies = [new Enemy()];
+        const player = new Player()
+
+        // Set up the keyboard input tracking
+        var keyboard = {};
+
+        document.addEventListener("keydown", function (event) {
+            keyboard[event.keyCode] = true;
+        });
+
+        document.addEventListener("keyup", function (event) {
+            keyboard[event.keyCode] = false;
+        });
+
+        playerSpeedInput.addEventListener("input", function () {
+            player.speed = playerSpeedInput.value - 0;
+        });
+
+        enemySpeedInput.addEventListener("input", function () {
+            for (var i = 0; i < enemies.length; i++) {
+                enemies[i].speed = enemySpeedInput.value - 0;
+            }
+        });
+
+        function collides(a, b) {
+            return a.x < b.x + b.width &&
+                a.x + a.width > b.x &&
+                a.y < b.y + b.height &&
+                a.y + a.height > b.y;
+        }
+
+        let enemyLimit = 10; // Set the enemy limit
+        let enemyCount = 3; // Initialize the enemy count to 0
+        let enemyTimer = 0; // Initialize the enemy timer to 0
+        let enemyInterval = 1000; // Set the interval at which to increase the number of enemies (in milliseconds)
+
+        setInterval(() => {
+            // Increment the enemy timer
+            enemyTimer += enemyInterval;
+
+            // If the enemy count is less than the enemy limit, increase the enemy count by 1
+            if (enemies.length < enemyLimit) {
+                enemies.push(new Enemy())
+            }
+
+        }, enemyInterval);
+
+        class GameLoop {
+            constructor(canvas, context) {
+                this.canvas = canvas;
+                this.context = context;
+                this.obstacles = {
+                    1: [
+                        new Obstacle({ x: 200, y: 200, width: 50, height: 50 }),
+                        new Obstacle({ x: 400, y: 100, width: 50, height: 50 }),
+                        new Obstacle({ x: 600, y: 300, width: 50, height: 50 })
+                    ],
+                    2: [
+                        new Obstacle({ x: 300, y: 300, width: 50, height: 50 }),
+                        new Obstacle({ x: 500, y: 200, width: 50, height: 50 }),
+                        new Obstacle({ x: 700, y: 100, width: 50, height: 50 }),
+                        new Obstacle({ x: 400, y: 400, width: 50, height: 50 })
+                    ],
+                    3: [
+                        new Obstacle({ x: 100, y: 100, width: 50, height: 50 }),
+                        new Obstacle({ x: 400, y: 200, width: 50, height: 50 }),
+                        new Obstacle({ x: 700, y: 300, width: 50, height: 50 }),
+                        new Obstacle({ x: 200, y: 400, width: 50, height: 50 }),
+                        new Obstacle({ x: 500, y: 100, width: 50, height: 50 })
+                    ]
+                };
+            }
+
+            draw() {
+                // Clear the canvas
+                this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                this.obstacles[player.level].forEach(obstacle => {
+                    context.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                });
+
+                // Update and draw the player
+                player.update(this.obstacles[player.level]);
+                player.draw();
+
+                // Update and draw the enemies
+                for (var i = 0; i < enemies.length; i++) {
+                    enemies[i].update();
+                    if (enemies[i]) {
+                        enemies[i].draw();
+                    }
+                }
+
+                // Check for collisions between shots and enemies
+                for (var i = 0; i < player.shots.length; i++) {
+                    for (var j = 0; j < enemies.length; j++) {
+                        if (collides(player.shots[i], enemies[j])) {
+                            // The shot has hit the enemy - remove both the shot and the enemy
+                            player.shots.splice(i, 1);
+                            enemies.splice(j, 1);
+                            break;
+                        }
+                    }
+                }
+
+                if (enemies.length == 0) {
+                    player.level++
+                }
+
+                // Request another animation frame
+                requestAnimationFrame(this.draw.bind(this));
+            }
+        }
+
+        const game = new GameLoop(canvas, context);
+        game.draw();
+
+    </script>
+</body>
+
+</html>
